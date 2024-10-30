@@ -67,13 +67,30 @@ function extractLinks(content) {
 }
 
 async function handleUpload(req, res) {
-    const content = JSON.parse(req.body.emailContent);
-
-    const links = extractLinks(content.messages.body);
-
-    const processedLinks = await processLinks(links);
-    
-    res.json(processedLinks);
+    try {
+        if (req.body.emailContent) {
+            // webhook data
+            const content = JSON.parse(req.body.emailContent);
+            const links = extractLinks(content.messages.body);
+            const processedLinks = await processLinks(links);
+            res.json(processedLinks);
+        } else if (req.file) {
+            // .eml file upload
+            const emlContent = await fs.readFile(req.file.path, 'utf8');
+            const parsed = await simpleParser(emlContent);
+            const links = extractLinks(parsed.html || parsed.textAsHtml || parsed.text);
+            const processedLinks = await processLinks(links);
+            
+            await fs.unlink(req.file.path);
+            
+            res.json(processedLinks);
+        } else {
+            throw new Error('No valid input provided');
+        }
+    } catch (error) {
+        console.error('Error processing upload:', error);
+        res.status(500).json({ error: error.message });
+    }
 }
 
 async function processLinks(links) {
